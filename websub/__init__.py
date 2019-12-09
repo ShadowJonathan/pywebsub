@@ -75,7 +75,7 @@ class WebSubClient:
             logger.exception(f"{topic} discovery request failed with exception:")
             raise HubNotFoundException(e)
 
-        if resp.status_code != 202:
+        if resp.status_code not in range(200, 300):
             raise HubNotFoundException(f"{topic} discovery request failed, status is {resp.status_code}")
         else:
             logger.debug(f"{topic} discovery request succeeded")
