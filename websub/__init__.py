@@ -116,7 +116,7 @@ class WebSubClient:
     def bp(self) -> sanic.Blueprint:
         bp = sanic.Blueprint("websub")
 
-        @bp.route("/push-callback/<string:hex_id>")
+        @bp.route("/push-callback/<hex_id>")
         async def callback(request: Request, hex_id: str) -> sanic.response.HTTPResponse:
             topic = request.args.get("hub.topic")
             mode = request.args.get("hub.mode")
