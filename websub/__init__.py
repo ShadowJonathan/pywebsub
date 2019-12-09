@@ -3,8 +3,9 @@ import datetime
 import hashlib
 import logging
 import os
+from dataclasses import dataclass
 from functools import partial
-from typing import Dict, NamedTuple, Callable, Optional, Awaitable
+from typing import Dict, Callable, Optional, Awaitable
 
 import httpx
 import sanic
@@ -15,7 +16,8 @@ from sanic.response import text
 logger = logging.getLogger("websub")
 
 
-class Subscription(NamedTuple):
+@dataclass
+class Subscription:
     hub: str
     topic: str
     hex_id: str
