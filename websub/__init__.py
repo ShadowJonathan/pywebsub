@@ -165,7 +165,7 @@ class WebSubClient:
             self.app.blueprint(self.bp)
 
     async def boot(self, *args, **kwargs):
-        await asyncio.gather(self.app.run(*args, **kwargs), self.start())
+        await asyncio.gather(self.app.create_server(*args, **kwargs, return_asyncio_server=True), self.start())
 
     async def start(self):
         self.running = True
