@@ -19,7 +19,13 @@ setuptools.setup(
             "Operating System :: OS Independent",
       ],
       install_requires=[
-            'sanic'
+            'sanic',
+            'httpx'
       ],
-      setup_requires=['wheel']
+      setup_requires=['wheel'],
+      extras_require={
+            'dev': [
+                  'ipython'
+            ]
+      }
 )
