@@ -21,7 +21,9 @@ setuptools.setup(
       install_requires=[
             'sanic',
             'httpx',
-            'anyio'
+            'anyio',
+            'bs4',
+            'lxml'
       ],
       setup_requires=['wheel'],
       extras_require={

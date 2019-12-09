@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from functools import partial
 from typing import Dict, Callable, Optional, Awaitable
 
+import bs4
 import httpx
 import sanic
 from anyio import create_task_group
@@ -14,6 +15,10 @@ from sanic.request import Request
 from sanic.response import text
 
 logger = logging.getLogger("websub")
+
+
+class HubNotFoundException(Exception):
+    pass
 
 
 @dataclass
@@ -62,11 +67,27 @@ class WebSubClient:
                 await self.make_request(sub, "unsubscribe")
             del self.subscriptions[topic]
 
-    async def discover(self, topic: str):
-        raise NotImplementedError()  # todo
+    async def discover(self, topic: str) -> str:
+        try:
+            resp = await httpx.get(topic, headers=self.headers)
+        except httpx.exceptions.HTTPError as e:
+            logger.exception(f"{topic} discovery request failed with exception:")
+            raise HubNotFoundException(e)
 
-    async def discover_and_sub(self, topic: str):
-        raise NotImplementedError()  # todo
+        if resp.status_code != 202:
+            raise HubNotFoundException(f"{topic} discovery request failed, status is {resp.status_code}")
+        else:
+            logger.debug(f"{topic} discovery request succeeded")
+            soup = bs4.BeautifulSoup(resp.content, "xml")
+            link = soup.find("link", rel="hub")
+            if link is None:
+                raise HubNotFoundException(f"rel=hub link not present in {topic}")
+
+            return link.attrs['href']
+
+    async def discover_and_sub(self, topic: str, handler: Callable[[bytes], Awaitable[None]]):
+        hub = await self.discover(topic)
+        await self.subscribe(hub, topic, handler)
 
     async def make_request(self, sub: Subscription, mode: str = "subscribe"):
         callback_url = self.make_callback_url(sub.hex_id)
@@ -76,10 +97,6 @@ class WebSubClient:
               "hub.callback": callback_url,
               "hub.topic":    sub.topic,
               "hub.mode":     "subscribe"
-        }
-
-        headers = {
-              "From": self._from
         }
 
         try:
@@ -165,6 +182,12 @@ class WebSubClient:
                     return sanic.response.HTTPResponse()
 
         return bp
+
+    @property
+    def headers(self):
+        return {
+              "From": self._from
+        }
 
     def install(self):
         bp = self.bp
