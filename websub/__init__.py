@@ -164,8 +164,8 @@ class WebSubClient:
         if bp.name not in self.app.blueprints:
             self.app.blueprint(self.bp)
 
-    async def boot(self, *args):
-        await asyncio.gather(self.app.run(*args), self.start())
+    async def boot(self, *args, **kwargs):
+        await asyncio.gather(self.app.run(*args, **kwargs), self.start())
 
     async def start(self):
         self.running = True
