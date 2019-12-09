@@ -141,7 +141,7 @@ class WebSubClient:
         async def heartbeat(request: Request, hex_id: str) -> sanic.response.HTTPResponse:
             return text(hex_id, status=200 if hex_id in self.heartbeat_hashes else 404)
 
-        @bp.route("/push-callback/<hex_id>")
+        @bp.route("/push-callback/<hex_id>", methods=["GET", "POST"])
         async def callback(request: Request, hex_id: str) -> sanic.response.HTTPResponse:
             topic = request.args.get("hub.topic")
             mode = request.args.get("hub.mode")
