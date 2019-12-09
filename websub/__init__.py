@@ -100,7 +100,7 @@ class WebSubClient:
         }
 
         try:
-            resp = await httpx.post(sub.hub, data=values, headers=headers)
+            resp = await httpx.post(sub.hub, data=values, headers=self.headers)
         except httpx.exceptions.HTTPError:
             logger.exception(f"{mode} request failed with exception, {sub} at {callback_url}:")
             return
@@ -204,7 +204,8 @@ class WebSubClient:
     async def start(self):
         self.running = True
         self.install()
-        await asyncio.sleep(1)
+        logger.debug("waiting 30 seconds before starting ensure_subbed_loop...")
+        await asyncio.sleep(30)
         await self.ensure_subbed_loop()
 
     async def ensure_subbed_loop(self):
