@@ -10,7 +10,7 @@ import sanic
 from sanic.request import Request
 from sanic.response import text
 
-logger = logging.getLogger("hubbub")
+logger = logging.getLogger("websub")
 
 
 class Subscription(NamedTuple):
@@ -27,44 +27,15 @@ class Subscription(NamedTuple):
         return f"<Subscription {self.topic} (0x{self.hex_id.upper()} {self.lease})>"
 
 
-class HubBubClient:
+class WebSubClient:
     def __init__(self, https: bool, app: sanic.Sanic, server: str = None, _from: str = None):
         self.server = server
         self.https = https
         self.app = app
-        self._from = f"{_from or 'default'} (pyhubbub)"
+        self._from = f"{_from or 'default'} (pywebsub)"
         self.running = False
         self.subscriptions: Dict[str, Subscription] = {}
         self.seen_hashes = set()
-
-    def install(self):
-        bp = self.bp
-        if bp.name not in self.app.blueprints:
-            self.app.blueprint(self.bp)
-
-    async def boot(self, *args):
-        await asyncio.gather(self.app.run(*args), self.start())
-
-    async def start(self):
-        self.running = True
-        self.install()
-        await asyncio.sleep(1)
-        await self.ensure_subbed_loop()
-
-    async def ensure_subbed_loop(self):
-        while True:
-            try:
-                await self.ensure_subbed()
-            except Exception:
-                logger.exception("ensure_subbed gave an exception")
-
-            await asyncio.sleep(60)
-
-    async def ensure_subbed(self):
-        in_one_hour = datetime.datetime.now() + datetime.timedelta(hours=1)
-        for s in self.subscriptions.values():
-            if (s.verified_at + s.lease) < in_one_hour:
-                await self.make_request(s)
 
     async def subscribe(self, hub: str, topic: str, handler: Callable[[bytes], Awaitable[None]]):
         s = Subscription(hub=hub,
@@ -116,7 +87,7 @@ class HubBubClient:
             logger.info(f"{mode} request succeeded, {sub} at {callback_url}")
 
     def make_callback_url(self, hex_id: str) -> str:
-        return self.app.url_for('hubbub.callback', hex_id=hex_id,
+        return self.app.url_for('websub.callback', hex_id=hex_id,
                                 _scheme='https' if self.https else 'http',
                                 _external=True, _server=self.server)
 
@@ -136,7 +107,7 @@ class HubBubClient:
 
     @property
     def bp(self) -> sanic.Blueprint:
-        bp = sanic.Blueprint("hubbub")
+        bp = sanic.Blueprint("websub")
 
         @bp.route("/push-callback/<string:hex_id>")
         async def callback(request: Request, hex_id: str) -> sanic.response.HTTPResponse:
@@ -187,3 +158,32 @@ class HubBubClient:
                     return sanic.response.HTTPResponse()
 
         return bp
+
+    def install(self):
+        bp = self.bp
+        if bp.name not in self.app.blueprints:
+            self.app.blueprint(self.bp)
+
+    async def boot(self, *args):
+        await asyncio.gather(self.app.run(*args), self.start())
+
+    async def start(self):
+        self.running = True
+        self.install()
+        await asyncio.sleep(1)
+        await self.ensure_subbed_loop()
+
+    async def ensure_subbed_loop(self):
+        while True:
+            try:
+                await self.ensure_subbed()
+            except Exception:
+                logger.exception("ensure_subbed gave an exception")
+
+            await asyncio.sleep(60)
+
+    async def ensure_subbed(self):
+        in_one_hour = datetime.datetime.now() + datetime.timedelta(hours=1)
+        for s in self.subscriptions.values():
+            if (s.verified_at + s.lease) < in_one_hour:
+                await self.make_request(s)
