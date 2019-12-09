@@ -196,10 +196,11 @@ class WebSubClient:
         in_one_hour = datetime.datetime.now() + datetime.timedelta(hours=1)
         for s in self.subscriptions.values():
             logger.debug(f"ensure_subbed: checking {s}")
-            if s.verified_at is None or s.lease is None:
+            if not s.cold and (s.verified_at is None or s.lease is None):
                 logger.debug(f"ensure_subbed: {s} not yet verified, skipping...")
                 continue
-            if (s.verified_at + s.lease) < in_one_hour:
+            if s.cold or (s.verified_at + s.lease) < in_one_hour:
+                s.cold = False
                 await self.make_request(s)
             else:
                 logger.debug(f"ensure_subbed: {s} does not need new lease, verified at {s.verified_at}")
