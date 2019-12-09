@@ -4,7 +4,7 @@ with open("README.md", "r") as fh:
     long_description = fh.read()
 
 setuptools.setup(
-      name="pywebsub",
+      name="websub",
       version="0.0.1",
       author="Jonathan de Jong",
       author_email="jonathan@automatia.nl",
