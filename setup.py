@@ -20,7 +20,8 @@ setuptools.setup(
       ],
       install_requires=[
             'sanic',
-            'httpx'
+            'httpx',
+            'anyio'
       ],
       setup_requires=['wheel'],
       extras_require={

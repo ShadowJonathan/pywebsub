@@ -3,10 +3,12 @@ import datetime
 import hashlib
 import logging
 import os
+from functools import partial
 from typing import Dict, NamedTuple, Callable, Optional, Awaitable
 
 import httpx
 import sanic
+from anyio import create_task_group
 from sanic.request import Request
 from sanic.response import text
 
@@ -22,6 +24,8 @@ class Subscription(NamedTuple):
 
     verified_at: Optional[datetime.datetime] = None
     lease: Optional[datetime.timedelta] = None
+
+    cold: bool = True
 
     def __repr__(self) -> str:
         return f"<Subscription {self.topic} (0x{self.hex_id.upper()} {self.lease})>"
@@ -44,6 +48,7 @@ class WebSubClient:
                          handler=handler)
         self.subscriptions[topic] = s
         if self.running:
+            s.cold = False
             await self.make_request(s)
 
     async def unsubscribe(self, topic: str):
@@ -165,7 +170,11 @@ class WebSubClient:
             self.app.blueprint(self.bp)
 
     async def boot(self, *args, **kwargs):
-        await asyncio.gather(self.app.create_server(*args, **kwargs, return_asyncio_server=True), self.start())
+        create_server = partial(self.app.create_server, *args, **kwargs, return_asyncio_server=True)
+
+        async with create_task_group() as tg:
+            await tg.spawn(create_server)
+            await tg.spawn(self.start)
 
     async def start(self):
         self.running = True
