@@ -183,7 +183,14 @@ class WebSubClient:
             await asyncio.sleep(60)
 
     async def ensure_subbed(self):
+        logger.debug("ensure_subbed called")
         in_one_hour = datetime.datetime.now() + datetime.timedelta(hours=1)
         for s in self.subscriptions.values():
+            logger.debug(f"ensure_subbed: checking {s}")
+            if s.verified_at is None or s.lease is None:
+                logger.debug(f"ensure_subbed: {s} not yet verified, skipping...")
+                continue
             if (s.verified_at + s.lease) < in_one_hour:
                 await self.make_request(s)
+            else:
+                logger.debug(f"ensure_subbed: {s} does not need new lease, verified at {s.verified_at}")
