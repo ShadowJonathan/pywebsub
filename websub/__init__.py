@@ -47,6 +47,7 @@ class WebSubClient:
         self.running = False
         self.subscriptions: Dict[str, Subscription] = {}
         self.seen_hashes = set()
+        self.heartbeat_hashes = set()
 
     async def subscribe(self, hub: str, topic: str, handler: Callable[[bytes], Awaitable[None]]):
         s = Subscription(hub=hub,
@@ -111,7 +112,10 @@ class WebSubClient:
             logger.info(f"{mode} request succeeded, {sub} at {callback_url}")
 
     def make_callback_url(self, hex_id: str) -> str:
-        return self.app.url_for('websub.callback', hex_id=hex_id,
+        return self.url_for('callback', hex_id=hex_id)
+
+    def url_for(self, view_name: str, **kwargs):
+        return self.app.url_for(f"websub.{view_name}", **kwargs,
                                 _scheme='https' if self.https else 'http',
                                 _external=True, _server=self.server)
 
@@ -132,6 +136,10 @@ class WebSubClient:
     @property
     def bp(self) -> sanic.Blueprint:
         bp = sanic.Blueprint("websub")
+
+        @bp.route("/hb/<hex_id>")
+        async def heartbeat(request: Request, hex_id: str) -> sanic.response.HTTPResponse:
+            return text(hex_id, status=200 if hex_id in self.heartbeat_hashes else 404)
 
         @bp.route("/push-callback/<hex_id>")
         async def callback(request: Request, hex_id: str) -> sanic.response.HTTPResponse:
@@ -204,9 +212,34 @@ class WebSubClient:
     async def start(self):
         self.running = True
         self.install()
-        logger.debug("waiting 30 seconds before starting ensure_subbed_loop...")
-        await asyncio.sleep(30)
+        logger.debug("waiting 5 seconds before starting checking wait_till_heartbeat...")
+        await asyncio.sleep(5)
+        logger.debug("waiting till heartbeat...")
+        await self.wait_till_heartbeat()
+        logger.debug("starting subbed loop...")
         await self.ensure_subbed_loop()
+
+    async def wait_till_heartbeat(self):
+        class NotCorrect(Exception):
+            pass
+
+        while True:
+            try_hex = os.urandom(6).hex()
+            self.heartbeat_hashes.add(try_hex)
+            try:
+                r = await httpx.get(self.url_for("heartbeat", hex_id=try_hex))
+                if r.status_code != 200:
+                    raise NotCorrect()
+            except httpx.exceptions.HTTPError:
+                logger.debug("heartbeat failed with HTTPError, waiting 2 seconds...")
+                await asyncio.sleep(2)
+            except NotCorrect:
+                logger.debug("heartbeat failed reaching current server, waiting 2 seconds...")
+                await asyncio.sleep(2)
+            else:
+                return
+            finally:
+                self.heartbeat_hashes.remove(try_hex)
 
     async def ensure_subbed_loop(self):
         while True:
