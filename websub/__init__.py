@@ -4,13 +4,11 @@ import hashlib
 import logging
 import os
 from dataclasses import dataclass
-from functools import partial
 from typing import Dict, Callable, Optional, Awaitable
 
 import bs4
 import httpx
 import sanic
-from anyio import create_task_group
 from sanic.request import Request
 from sanic.response import text
 
@@ -202,12 +200,13 @@ class WebSubClient:
         if bp.name not in self.app.blueprints:
             self.app.blueprint(self.bp)
 
-    async def boot(self, *args, **kwargs):
-        create_server = partial(self.app.create_server, *args, **kwargs, return_asyncio_server=True)
+    async def boot(self, *args, add_start=True, **kwargs):
+        if add_start:
+            self.app.add_task(self.start)
+        await self.app.create_server(*args, **kwargs, return_asyncio_server=True)
 
-        async with create_task_group() as tg:
-            await tg.spawn(create_server)
-            await tg.spawn(self.start)
+    async def stop(self):
+        self.app.stop()
 
     async def start(self):
         self.running = True

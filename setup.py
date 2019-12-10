@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
       name="websub",
-      version="0.1.0",
+      version="0.1.1",
       author="Jonathan de Jong",
       author_email="jonathan@automatia.nl",
       description="WebSub Client for python, based off of gohubbub",
