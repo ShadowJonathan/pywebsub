@@ -94,7 +94,7 @@ class WebSubClient:
         else:
             hub = hublink.attrs['href']
 
-        await self._make_request(topic, hub, self.make_callback_url(hex_id), "unsubscribe")
+        await self._make_request(topic=topic, hub=hub, callback_url=self.make_callback_url(hex_id), mode="unsubscribe")
 
     async def discover(self, topic: str) -> str:
         try:
@@ -130,7 +130,7 @@ class WebSubClient:
         values = {
               "hub.callback": callback_url,
               "hub.topic":    topic,
-              "hub.mode":     "subscribe"
+              "hub.mode":     mode
         }
 
         try:
