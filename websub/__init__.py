@@ -12,6 +12,7 @@ import httpx
 import sanic
 from sanic.request import Request
 from sanic.response import text
+from sanic.server import AsyncioServer
 
 logger = logging.getLogger("websub")
 
@@ -237,16 +238,13 @@ class WebSubClient:
         if bp.name not in self.app.blueprints:
             self.app.blueprint(self.bp)
 
-    async def boot(self, *args, add_worker=True, return_asyncio_server=True, **kwargs):
+    async def boot(self, *args, add_worker=True, return_asyncio_server=True, **kwargs) -> Optional[AsyncioServer]:
         if add_worker:
             self.app.add_task(self.start_worker)
-        await self.app.create_server(*args, **kwargs, return_asyncio_server=return_asyncio_server)
+        return await self.app.create_server(*args, **kwargs, return_asyncio_server=return_asyncio_server)
 
     async def stop(self):
         self.app.stop()
-
-    async def start(self, *args, **kwargs):
-        await self.boot(*args, return_asyncio_server=False, **kwargs)
 
     async def start_worker(self):
         self.running = True
