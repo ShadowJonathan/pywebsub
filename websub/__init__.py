@@ -4,6 +4,7 @@ import hashlib
 import logging
 import os
 from dataclasses import dataclass
+from enum import Enum, auto
 from typing import Dict, Callable, Optional, Awaitable
 
 import bs4
@@ -36,11 +37,18 @@ class Subscription:
         return f"<Subscription {self.topic} (0x{self.hex_id.upper()} {self.lease})>"
 
 
+class UnknownFeedStrategy(Enum):
+    Ignore = auto()
+    Unsubscribe = auto()
+
+
 class WebSubClient:
-    def __init__(self, https: bool, app: sanic.Sanic, server: str = None, _from: str = None):
+    def __init__(self, https: bool, app: sanic.Sanic, server: str = None, _from: str = None,
+                 unknown_feed_strategy: UnknownFeedStrategy = UnknownFeedStrategy.Ignore):
         self.server = server
         self.https = https
         self.app = app
+        self.u_feed_strat = unknown_feed_strategy
         self._from = f"{_from or 'default'} (pywebsub)"
         self.running = False
         self.subscriptions: Dict[str, Subscription] = {}
@@ -66,6 +74,27 @@ class WebSubClient:
                 await self.make_request(sub, "unsubscribe")
             del self.subscriptions[topic]
 
+    async def _try_subsubscribe(self, request: Request, hex_id: str):
+        soup = bs4.BeautifulSoup(request.body, "xml")
+        selflink = soup.find("link", rel="self")
+        if selflink is None:
+            logger.warning(f"Cannot unsubscribe incoming subscription at {hex_id}; "
+                           f"rel=self link is not found.")
+            return
+        topic = selflink.attrs['href']
+        hublink = soup.find("link", rel="hub")
+        if hublink is None:
+            try:
+                hub = await self.discover(topic)
+            except HubNotFoundException:
+                logger.warning(f"Cannot unsubscribe incoming subscription at {hex_id} for {topic}; "
+                               f"rel=hub not found and discover errored.")
+                return
+        else:
+            hub = hublink.attrs['href']
+
+        await self._make_request(topic, hub, self.make_callback_url(hex_id), "unsubscribe")
+
     async def discover(self, topic: str) -> str:
         try:
             resp = await httpx.get(topic, headers=self.headers)
@@ -90,24 +119,29 @@ class WebSubClient:
 
     async def make_request(self, sub: Subscription, mode: str = "subscribe"):
         callback_url = self.make_callback_url(sub.hex_id)
-        logger.info(f"Subscribing to {sub.topic}, calling back to {callback_url}")
+        await self._make_request(sub.topic, sub.hub, callback_url, mode, sub)
+
+    async def _make_request(self, topic: str, hub: str, callback_url: str, mode: str,
+                            subscription: Optional[Subscription] = None):
+
+        logger.info(f"Doing {mode} request to {hub} for {topic}, calling back to {callback_url}")
 
         values = {
               "hub.callback": callback_url,
-              "hub.topic":    sub.topic,
+              "hub.topic":    topic,
               "hub.mode":     "subscribe"
         }
 
         try:
-            resp = await httpx.post(sub.hub, data=values, headers=self.headers)
+            resp = await httpx.post(hub, data=values, headers=self.headers)
         except httpx.exceptions.HTTPError:
-            logger.exception(f"{mode} request failed with exception, {sub} at {callback_url}:")
+            logger.exception(f"{mode} request failed with exception, {subscription!r} at {callback_url}:")
             return
 
         if resp.status_code != 202:
-            logger.error(f"{mode} request failed, {sub} at {callback_url}, status is {resp.status_code}")
+            logger.error(f"{mode} request failed, {subscription!r} at {callback_url}, status is {resp.status_code}")
         else:
-            logger.info(f"{mode} request succeeded, {sub} at {callback_url}")
+            logger.info(f"{mode} request succeeded, {subscription!r} at {callback_url}")
 
     def make_callback_url(self, hex_id: str) -> str:
         return self.url_for('callback', hex_id=hex_id)
@@ -181,6 +215,9 @@ class WebSubClient:
                 if sub is None:
                     logger.warning("Got unknown message for unknown subscription:")
                     logger.warning(f"{hex_id}: {request}")
+                    if self.u_feed_strat == UnknownFeedStrategy.Unsubscribe:
+                        logger.info('Unknown feed strategy is "unsubscribe"; unsubscribing from unknown feed...')
+                        await self._try_subsubscribe(request, hex_id)
                     return text("Unknown subscription", status=400)
                 else:
                     logger.info(f"Update for {sub}")
