@@ -164,8 +164,8 @@ class WebSubClient:
             elif mode == "unsubscribe":
                 sub = self.subscriptions.get(topic)
                 if sub is None:
-                    logger.warning(f"Unexpected unsubscribe for {topic} on {hex_id}")
-                    return text("Unexpected unsubscribe", status=400)
+                    logger.warning(f"Unexpected unsubscribe for {topic} on {hex_id}, still unsubscribing...")
+                    return text(request.args.get("hub.challenge"))
                 else:
                     logger.info(f"Unsubscribe confirmed for {topic} on {hex_id}")
                     if hex_id != sub.hex_id:
